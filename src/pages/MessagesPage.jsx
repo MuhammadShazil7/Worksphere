@@ -14,7 +14,7 @@ import {
   FaTimes,
   FaUserPlus
 } from 'react-icons/fa';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 import { useChat } from '../context/ChatContext';
@@ -45,43 +45,46 @@ const MessagesPage = () => {
   const [messageInput, setMessageInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedUserId, setSelectedUserId] = useState(null);
   const [showNewMessage, setShowNewMessage] = useState(false);
   const [availableUsers, setAvailableUsers] = useState([]);
   const [userSearch, setUserSearch] = useState('');
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [userIdFromUrl, setUserIdFromUrl] = useState(null);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Get userId from URL params - FIXED: Added dependency array with proper checks
+  // Get userId from URL params
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const userId = params.get('userId');
-    
-    if (userId && userId !== selectedUserId) {
-      setSelectedUserId(userId);
+    setUserIdFromUrl(userId);
+  }, [location.search]);
+
+  // Handle user selection when URL changes or conversations load
+  useEffect(() => {
+    if (userIdFromUrl && conversations.length > 0) {
       // Find the user in conversations
-      const conv = conversations.find(c => c.user?._id === userId);
+      const conv = conversations.find(c => c.user?._id === userIdFromUrl);
       if (conv) {
-        selectUser(conv.user);
+        // Only select if different from current selection
+        if (!selectedUser || selectedUser._id !== userIdFromUrl) {
+          selectUser(conv.user);
+        }
       } else {
         // If user not in conversations, fetch user data
-        fetchUserAndSelect(userId);
+        fetchUserAndSelect(userIdFromUrl);
       }
     }
-  }, [location.search, conversations, selectUser, selectedUserId]);
+  }, [userIdFromUrl, conversations, selectedUser, selectUser]);
 
-  // Initial fetch - only once
+  // Initial fetch
   useEffect(() => {
-    if (!initialLoadDone) {
-      fetchConversations();
-      setInitialLoadDone(true);
-    }
-  }, [fetchConversations, initialLoadDone]);
+    fetchConversations();
+  }, []);
 
+  // Scroll to bottom when messages change
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -89,14 +92,15 @@ const MessagesPage = () => {
   // Focus input when user is selected
   useEffect(() => {
     if (selectedUser && inputRef.current) {
-      setTimeout(() => inputRef.current.focus(), 100);
+      setTimeout(() => inputRef.current.focus(), 200);
     }
   }, [selectedUser]);
 
   const fetchUserAndSelect = useCallback(async (userId) => {
     try {
       const response = await api.get(`/users/${userId}`);
-      selectUser(response.data.user);
+      const userData = response.data.user;
+      selectUser(userData);
     } catch (error) {
       console.error('Failed to fetch user:', error);
       toast.error('Could not load user');
@@ -130,12 +134,13 @@ const MessagesPage = () => {
   const handleStartConversation = (selectedUser) => {
     setShowNewMessage(false);
     selectUser(selectedUser);
-    setSelectedUserId(selectedUser._id);
     navigate(`/messages?userId=${selectedUser._id}`);
   };
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
   };
 
   const handleSendMessage = async () => {
@@ -181,18 +186,18 @@ const MessagesPage = () => {
   };
 
   const handleSelectUser = (user) => {
+    if (!user) return;
+    // Clear messages first
     selectUser(user);
-    setSelectedUserId(user._id);
     navigate(`/messages?userId=${user._id}`);
   };
 
   const handleBack = () => {
     selectUser(null);
-    setSelectedUserId(null);
     navigate('/messages');
   };
 
-  // Memoize filtered conversations to prevent unnecessary re-renders
+  // Memoize filtered conversations
   const filteredConversations = useMemo(() => {
     return conversations.filter(conv =>
       conv.user?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -231,6 +236,11 @@ const MessagesPage = () => {
   const isMyMessage = (msg) => {
     return msg.sender._id === user?.id || msg.sender === user?.id;
   };
+
+  // Clear messages when switching users
+  const handleClearMessages = useCallback(() => {
+    // This is handled by selectUser in ChatContext
+  }, []);
 
   if (loading && !conversations.length) {
     return (

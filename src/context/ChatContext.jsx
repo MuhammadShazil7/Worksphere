@@ -1,4 +1,4 @@
-// src/context/ChatContext.jsx - Fix the socket disconnect
+// src/context/ChatContext.jsx - Updated selectUser function
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './AuthContext';
@@ -24,9 +24,8 @@ export const ChatProvider = ({ children }) => {
   const [typingUsers, setTypingUsers] = useState({});
   const [isConversationsLoading, setIsConversationsLoading] = useState(false);
   const socketRef = useRef(null);
-  const reconnectAttempts = useRef(0);
 
-  // Fetch conversations - memoized to prevent unnecessary calls
+  // Fetch conversations
   const fetchConversations = useCallback(async () => {
     if (!user) return;
     
@@ -41,9 +40,12 @@ export const ChatProvider = ({ children }) => {
     }
   }, [user]);
 
-  // Fetch messages for a specific user
+  // Fetch messages for a specific user - CLEAR messages first
   const fetchMessages = useCallback(async (userId) => {
-    if (!userId) return;
+    if (!userId) {
+      setMessages([]);
+      return;
+    }
     
     setLoading(true);
     try {
@@ -62,7 +64,7 @@ export const ChatProvider = ({ children }) => {
     }
   }, [fetchConversations]);
 
-  // Send message - optimized without unnecessary re-fetch
+  // Send message
   const sendMessage = useCallback(async (receiverId, content, jobId = null) => {
     try {
       const response = await api.post('/messages', {
@@ -73,12 +75,12 @@ export const ChatProvider = ({ children }) => {
       
       const newMessage = response.data.message;
       
-      // Add message to local state immediately (optimistic update)
+      // Add message to local state immediately
       if (selectedUser && selectedUser._id === receiverId) {
         setMessages(prev => [...prev, newMessage]);
       }
       
-      // Update conversations list (optimistic update)
+      // Update conversations list
       setConversations(prev => {
         const updated = [...prev];
         const existingIndex = updated.findIndex(c => c.user._id === receiverId);
@@ -91,7 +93,6 @@ export const ChatProvider = ({ children }) => {
         
         if (existingIndex !== -1) {
           updated[existingIndex] = newConversation;
-          // Move to top
           const [item] = updated.splice(existingIndex, 1);
           updated.unshift(item);
         } else {
@@ -108,13 +109,14 @@ export const ChatProvider = ({ children }) => {
     }
   }, [selectedUser]);
 
-  // Select a user to chat with
+  // Select a user to chat with - CLEAR messages first
   const selectUser = useCallback((user) => {
+    // Clear messages immediately when switching
+    setMessages([]);
     setSelectedUser(user);
+    
     if (user) {
       fetchMessages(user._id);
-    } else {
-      setMessages([]);
     }
   }, [fetchMessages]);
 
@@ -129,7 +131,6 @@ export const ChatProvider = ({ children }) => {
   useEffect(() => {
     if (!user) return;
 
-    // Only create socket if it doesn't exist or is disconnected
     if (!socketRef.current || !socketRef.current.connected) {
       const socketInstance = io('http://localhost:5000', {
         query: { userId: user.id },
@@ -143,10 +144,8 @@ export const ChatProvider = ({ children }) => {
       socketRef.current = socketInstance;
       setSocket(socketInstance);
 
-      // Socket event listeners
       socketInstance.on('connect', () => {
         console.log('Socket connected:', socketInstance.id);
-        reconnectAttempts.current = 0;
       });
 
       socketInstance.on('new_message', (message) => {
@@ -192,7 +191,6 @@ export const ChatProvider = ({ children }) => {
           [data.userId]: data.isTyping
         }));
         
-        // Auto-clear typing after 3 seconds if not cleared
         if (data.isTyping) {
           setTimeout(() => {
             setTypingUsers(prev => ({
@@ -206,29 +204,17 @@ export const ChatProvider = ({ children }) => {
       socketInstance.on('disconnect', () => {
         console.log('Socket disconnected');
       });
-
-      socketInstance.on('connect_error', (error) => {
-        console.error('Socket connection error:', error);
-        reconnectAttempts.current += 1;
-        if (reconnectAttempts.current > 5) {
-          socketInstance.disconnect();
-        }
-      });
     }
 
-    // Initial fetch
     fetchConversations();
 
-    // Cleanup - don't disconnect on every re-render
     return () => {
-      // Only disconnect if the component is unmounting
       if (socketRef.current) {
         socketRef.current.off('connect');
         socketRef.current.off('new_message');
         socketRef.current.off('message_sent');
         socketRef.current.off('user_typing');
         socketRef.current.off('disconnect');
-        socketRef.current.off('connect_error');
       }
     };
   }, [user, fetchConversations, selectedUser]);

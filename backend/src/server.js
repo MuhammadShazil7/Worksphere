@@ -5,6 +5,8 @@ import dotenv from 'dotenv';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import compression from 'compression';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import connectDB from './config/database.js';
 
@@ -12,8 +14,11 @@ import authRoutes from './routes/authRoutes.js';
 import jobRoutes from './routes/jobRoutes.js';
 import proposalRoutes from './routes/proposalRoutes.js';
 import messageRoutes from './routes/messageRoutes.js';
-import userRoutes from './routes/userRoutes.js'; // Add this import
+import userRoutes from './routes/userRoutes.js';
 import { initializeSocket } from './socket.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
 connectDB();
@@ -22,7 +27,6 @@ const app = express();
 const server = createServer(app);
 const io = initializeSocket(server);
 
-// Make io accessible to routes
 app.set('io', io);
 
 // Middleware
@@ -36,12 +40,15 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
+// Serve static files
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/jobs', jobRoutes);
 app.use('/api/proposals', proposalRoutes);
 app.use('/api/messages', messageRoutes);
-app.use('/api/users', userRoutes); // Add this line
+app.use('/api/users', userRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -68,4 +75,5 @@ server.listen(PORT, () => {
   console.log(`📍 http://localhost:${PORT}`);
   console.log(`📊 MongoDB: ${process.env.MONGODB_URI}`);
   console.log(`🔌 Socket.io ready`);
+  console.log(`📁 Uploads: ${path.join(__dirname, '../uploads')}`);
 });

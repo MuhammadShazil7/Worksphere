@@ -1,4 +1,4 @@
-// src/controllers/jobController.js
+// backend/src/controllers/jobController.js
 import Job from '../models/Job.js';
 
 // @desc    Create a job
@@ -8,15 +8,16 @@ export const createJob = async (req, res) => {
   try {
     req.body.client = req.user.id;
     const job = await Job.create(req.body);
+    
     res.status(201).json({
       success: true,
       job
     });
   } catch (error) {
-    console.error(error);
+    console.error('Create job error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: error.message || 'Server error'
     });
   }
 };
@@ -26,16 +27,48 @@ export const createJob = async (req, res) => {
 // @access  Public
 export const getJobs = async (req, res) => {
   try {
-    const jobs = await Job.find({ status: 'open' })
-      .populate('client', 'name email avatar')
+    const { category, experienceLevel, projectType, minBudget, maxBudget } = req.query;
+    
+    // Build filter object
+    const filter = { status: 'open' };
+    
+    if (category) {
+      filter.category = category;
+    }
+    
+    if (experienceLevel) {
+      filter.experienceLevel = experienceLevel;
+    }
+    
+    if (projectType) {
+      filter.projectType = projectType;
+    }
+    
+    if (minBudget || maxBudget) {
+      filter.budget = {};
+      if (minBudget) filter.budget.$gte = parseInt(minBudget);
+      if (maxBudget) filter.budget.$lte = parseInt(maxBudget);
+    }
+    
+    const jobs = await Job.find(filter)
+      .populate('client', 'name email avatar headline')
+      .populate({
+        path: 'proposals',
+        select: 'status freelancer createdAt',
+        populate: {
+          path: 'freelancer',
+          select: 'name email avatar'
+        }
+      })
       .sort({ createdAt: -1 });
+      
     res.status(200).json({
       success: true,
       count: jobs.length,
       jobs
     });
   } catch (error) {
-    console.error(error);
+    console.error('Get jobs error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -49,8 +82,14 @@ export const getJobs = async (req, res) => {
 export const getJob = async (req, res) => {
   try {
     const job = await Job.findById(req.params.id)
-      .populate('client', 'name email avatar')
-      .populate('proposals');
+      .populate('client', 'name email avatar headline rating totalProjects')
+      .populate({
+        path: 'proposals',
+        populate: {
+          path: 'freelancer',
+          select: 'name email avatar headline rating hourlyRate'
+        }
+      });
 
     if (!job) {
       return res.status(404).json({
@@ -64,7 +103,7 @@ export const getJob = async (req, res) => {
       job
     });
   } catch (error) {
-    console.error(error);
+    console.error('Get job error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -86,6 +125,7 @@ export const updateJob = async (req, res) => {
       });
     }
 
+    // Check authorization
     if (job.client.toString() !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -93,20 +133,37 @@ export const updateJob = async (req, res) => {
       });
     }
 
-    job = await Job.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true
+    // Prevent updating certain fields
+    const allowedUpdates = [
+      'title', 'description', 'category', 'skills', 
+      'budget', 'duration', 'experienceLevel', 'projectType', 'status'
+    ];
+    
+    const updates = {};
+    allowedUpdates.forEach(field => {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
     });
+
+    job = await Job.findByIdAndUpdate(
+      req.params.id, 
+      updates,
+      {
+        new: true,
+        runValidators: true
+      }
+    );
 
     res.status(200).json({
       success: true,
       job
     });
   } catch (error) {
-    console.error(error);
+    console.error('Update job error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: error.message || 'Server error'
     });
   }
 };
@@ -125,6 +182,7 @@ export const deleteJob = async (req, res) => {
       });
     }
 
+    // Check authorization
     if (job.client.toString() !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({
         success: false,
@@ -139,7 +197,7 @@ export const deleteJob = async (req, res) => {
       message: 'Job deleted successfully'
     });
   } catch (error) {
-    console.error(error);
+    console.error('Delete job error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -152,8 +210,36 @@ export const deleteJob = async (req, res) => {
 // @access  Private
 export const getJobsByClient = async (req, res) => {
   try {
-    const jobs = await Job.find({ client: req.params.clientId })
+    const { clientId } = req.params;
+    
+    console.log('Client ID from params:', clientId);
+    console.log('User ID from token:', req.user.id);
+    console.log('User ID from token (string):', req.user.id.toString());
+    
+    // Check if user is authorized
+    const isAuthorized = 
+      clientId === req.user.id || 
+      clientId === req.user._id || 
+      clientId === req.user.id.toString() ||
+      req.user.role === 'admin';
+    
+    if (!isAuthorized) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to view these jobs'
+      });
+    }
+
+    const jobs = await Job.find({ client: clientId })
       .populate('client', 'name email avatar')
+      .populate({
+        path: 'proposals',
+        select: 'status freelancer createdAt',
+        populate: {
+          path: 'freelancer',
+          select: 'name email avatar'
+        }
+      })
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -162,7 +248,94 @@ export const getJobsByClient = async (req, res) => {
       jobs
     });
   } catch (error) {
-    console.error(error);
+    console.error('Get jobs by client error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Get job stats for client
+// @route   GET /api/jobs/stats/client
+// @access  Private
+export const getJobStats = async (req, res) => {
+  try {
+    const stats = await Job.aggregate([
+      { $match: { client: req.user._id } },
+      { 
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          totalBudget: { $sum: '$budget' }
+        }
+      }
+    ]);
+
+    const totalJobs = stats.reduce((sum, stat) => sum + stat.count, 0);
+    const totalBudget = stats.reduce((sum, stat) => sum + stat.totalBudget, 0);
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        total: totalJobs,
+        totalBudget,
+        byStatus: stats
+      }
+    });
+  } catch (error) {
+    console.error('Get job stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Search jobs
+// @route   GET /api/jobs/search
+// @access  Public
+export const searchJobs = async (req, res) => {
+  try {
+    const { q, category, minBudget, maxBudget, experienceLevel } = req.query;
+    
+    // Build search filter
+    const filter = { status: 'open' };
+    
+    if (q) {
+      filter.$or = [
+        { title: { $regex: q, $options: 'i' } },
+        { description: { $regex: q, $options: 'i' } },
+        { skills: { $regex: q, $options: 'i' } }
+      ];
+    }
+    
+    if (category) {
+      filter.category = category;
+    }
+    
+    if (experienceLevel) {
+      filter.experienceLevel = experienceLevel;
+    }
+    
+    if (minBudget || maxBudget) {
+      filter.budget = {};
+      if (minBudget) filter.budget.$gte = parseInt(minBudget);
+      if (maxBudget) filter.budget.$lte = parseInt(maxBudget);
+    }
+    
+    const jobs = await Job.find(filter)
+      .populate('client', 'name email avatar')
+      .sort({ createdAt: -1 })
+      .limit(20);
+      
+    res.status(200).json({
+      success: true,
+      count: jobs.length,
+      jobs
+    });
+  } catch (error) {
+    console.error('Search jobs error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'

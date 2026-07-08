@@ -4,7 +4,6 @@ import api from '../services/api';
 
 const AuthContext = createContext();
 
-// ✅ Make sure this is exported
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -29,8 +28,16 @@ export const AuthProvider = ({ children }) => {
   const fetchUser = async () => {
     try {
       const response = await api.get('/auth/me');
-      setUser(response.data.user);
-      localStorage.setItem('user', JSON.stringify(response.data.user));
+      const userData = response.data.user;
+      
+      const userDataWithId = {
+        ...userData,
+        id: userData.id || userData._id,
+        _id: userData._id || userData.id
+      };
+      
+      setUser(userDataWithId);
+      localStorage.setItem('user', JSON.stringify(userDataWithId));
     } catch (error) {
       console.error('Failed to fetch user:', error);
       localStorage.removeItem('token');
@@ -46,12 +53,18 @@ export const AuthProvider = ({ children }) => {
       const response = await api.post('/auth/login', { email, password });
       const { token, user } = response.data;
       
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
-      setToken(token);
-      setUser(user);
+      const userData = {
+        ...user,
+        id: user.id || user._id,
+        _id: user._id || user.id
+      };
       
-      return { success: true, user };
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(userData));
+      setToken(token);
+      setUser(userData);
+      
+      return { success: true, user: userData };
     } catch (error) {
       console.error('Login error:', error);
       throw error.response?.data || { message: 'Login failed' };
@@ -63,14 +76,18 @@ export const AuthProvider = ({ children }) => {
       const response = await api.post('/auth/register', userData);
       const { token, user } = response.data;
       
-      console.log('Register response:', response.data);
+      const userDataWithId = {
+        ...user,
+        id: user.id || user._id,
+        _id: user._id || user.id
+      };
       
       localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
+      localStorage.setItem('user', JSON.stringify(userDataWithId));
       setToken(token);
-      setUser(user);
+      setUser(userDataWithId);
       
-      return { success: true, user };
+      return { success: true, user: userDataWithId };
     } catch (error) {
       console.error('Register error:', error);
       throw error.response?.data || { message: 'Registration failed' };
@@ -85,8 +102,13 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateUser = (updatedUser) => {
-    setUser(updatedUser);
-    localStorage.setItem('user', JSON.stringify(updatedUser));
+    const userData = {
+      ...updatedUser,
+      id: updatedUser.id || updatedUser._id,
+      _id: updatedUser._id || updatedUser.id
+    };
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
   };
 
   const value = {
@@ -106,6 +128,3 @@ export const AuthProvider = ({ children }) => {
     </AuthContext.Provider>
   );
 };
-
-// ✅ Default export for backward compatibility
-export default AuthContext;

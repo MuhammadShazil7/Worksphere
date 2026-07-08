@@ -31,7 +31,7 @@ const userSchema = new mongoose.Schema({
   },
   avatar: {
     type: String,
-    default: 'default-avatar.png'
+    default: null
   },
   
   // Freelancer specific fields
@@ -102,25 +102,10 @@ const userSchema = new mongoose.Schema({
   },
   
   // Social Links
-  github: {
-    type: String,
-    trim: true,
-    default: ''
-  },
-  linkedin: {
-    type: String,
-    trim: true,
-    default: ''
-  },
-  twitter: {
-    type: String,
-    trim: true,
-    default: ''
-  },
-  website: {
-    type: String,
-    trim: true,
-    default: ''
+  socialLinks: {
+    type: Map,
+    of: String,
+    default: {}
   },
   
   // Portfolio items
@@ -133,15 +118,23 @@ const userSchema = new mongoose.Schema({
       type: String,
       trim: true
     },
-    image: {
-      type: String,
-      default: ''
-    },
     link: {
       type: String,
       trim: true
     }
   }],
+  
+  // Contact
+  phone: {
+    type: String,
+    trim: true,
+    default: ''
+  },
+  website: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   
   // Stats
   rating: {

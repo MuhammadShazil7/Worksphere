@@ -1,5 +1,5 @@
 // src/pages/ProfilePage.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -22,7 +22,15 @@ import {
   FaGraduationCap,
   FaBuilding,
   FaUsers,
-  FaIndustry
+  FaIndustry,
+  FaCamera,
+  FaTrash,
+  FaSpinner,
+  FaLink,
+  FaPhone,
+  FaYoutube,
+  FaInstagram,
+  FaFacebook
 } from 'react-icons/fa';
 import toast from 'react-hot-toast';
 
@@ -32,14 +40,31 @@ import Container from '../components/ui/Container/Container';
 import Card from '../components/ui/Card/card';
 import Button from '../components/ui/Button/Button';
 import Input from '../components/ui/input';
+import Modal from '../components/ui/Modal/Modal';
+
+// Social Media Options
+const SOCIAL_PLATFORMS = [
+  { id: 'github', label: 'GitHub', icon: FaGithub, placeholder: 'https://github.com/username' },
+  { id: 'linkedin', label: 'LinkedIn', icon: FaLinkedin, placeholder: 'https://linkedin.com/in/username' },
+  { id: 'twitter', label: 'Twitter', icon: FaTwitter, placeholder: 'https://twitter.com/username' },
+  { id: 'youtube', label: 'YouTube', icon: FaYoutube, placeholder: 'https://youtube.com/@username' },
+  { id: 'instagram', label: 'Instagram', icon: FaInstagram, placeholder: 'https://instagram.com/username' },
+  { id: 'facebook', label: 'Facebook', icon: FaFacebook, placeholder: 'https://facebook.com/username' },
+  { id: 'website', label: 'Website', icon: FaGlobe, placeholder: 'https://yourwebsite.com' },
+];
 
 const ProfilePage = () => {
   const { user, updateUser } = useAuth();
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
+  
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [profile, setProfile] = useState(null);
+  const [selectedSocial, setSelectedSocial] = useState('');
+  
   const [formData, setFormData] = useState({
     name: '',
     headline: '',
@@ -47,19 +72,18 @@ const ProfilePage = () => {
     location: '',
     hourlyRate: '',
     skills: [],
-    experienceLevel: '',
-    availability: '',
+    experienceLevel: 'Intermediate',
+    availability: 'Available',
     languages: [],
     companyName: '',
     companyWebsite: '',
     industry: '',
     companySize: '',
     companyDescription: '',
-    github: '',
-    linkedin: '',
-    twitter: '',
-    website: '',
+    socialLinks: {},
+    phone: '',
   });
+  
   const [skillInput, setSkillInput] = useState('');
   const [languageInput, setLanguageInput] = useState('');
 
@@ -72,6 +96,10 @@ const ProfilePage = () => {
       setLoading(true);
       const response = await api.get('/auth/me');
       const userData = response.data.user;
+      
+      console.log('Fetched user data:', userData); // Debug
+      console.log('Avatar URL:', userData.avatar); // Debug
+      
       setProfile(userData);
       setFormData({
         name: userData.name || '',
@@ -88,16 +116,89 @@ const ProfilePage = () => {
         industry: userData.industry || '',
         companySize: userData.companySize || '',
         companyDescription: userData.companyDescription || '',
-        github: userData.github || '',
-        linkedin: userData.linkedin || '',
-        twitter: userData.twitter || '',
-        website: userData.website || '',
+        socialLinks: userData.socialLinks || {},
+        phone: userData.phone || '',
       });
     } catch (error) {
       console.error('Failed to fetch profile:', error);
       toast.error('Failed to load profile');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size should be less than 5MB');
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('avatar', file);
+
+      const response = await api.post('/auth/upload-avatar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      console.log('Upload response:', response.data); // Debug
+
+      const avatarUrl = response.data.avatar;
+      
+      // Update local profile state
+      setProfile(prev => ({ ...prev, avatar: avatarUrl }));
+      
+      // Update AuthContext user data
+      if (updateUser) {
+        updateUser({ ...user, avatar: avatarUrl });
+      }
+      
+      // Update localStorage directly
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      localStorage.setItem('user', JSON.stringify({ ...currentUser, avatar: avatarUrl }));
+      
+      toast.success('Profile picture updated! 🎉');
+      
+      // Force re-fetch profile to ensure sync
+      await fetchProfile();
+    } catch (error) {
+      console.error('Failed to upload image:', error);
+      toast.error('Failed to upload profile picture');
+    } finally {
+      setUploadingImage(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    try {
+      await api.delete('/auth/avatar');
+      setProfile(prev => ({ ...prev, avatar: null }));
+      
+      if (updateUser) {
+        updateUser({ ...user, avatar: null });
+      }
+      
+      const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+      localStorage.setItem('user', JSON.stringify({ ...currentUser, avatar: null }));
+      
+      toast.success('Profile picture removed');
+      await fetchProfile();
+    } catch (error) {
+      console.error('Failed to remove avatar:', error);
+      toast.error('Failed to remove profile picture');
     }
   };
 
@@ -110,7 +211,11 @@ const ProfilePage = () => {
       };
       
       const response = await api.put('/auth/updateprofile', updateData);
-      updateUser(response.data.user);
+      
+      if (updateUser) {
+        updateUser(response.data.user);
+      }
+      
       setProfile(response.data.user);
       setIsEditing(false);
       toast.success('Profile updated successfully! 🎉');
@@ -155,6 +260,37 @@ const ProfilePage = () => {
     });
   };
 
+  const handleAddSocialLink = () => {
+    if (selectedSocial && formData.socialLinks[selectedSocial]?.trim()) {
+      const updatedSocialLinks = { ...formData.socialLinks };
+      updatedSocialLinks[selectedSocial] = formData.socialLinks[selectedSocial];
+      setFormData({
+        ...formData,
+        socialLinks: updatedSocialLinks
+      });
+      setSelectedSocial('');
+    }
+  };
+
+  const handleRemoveSocialLink = (platform) => {
+    const updatedSocialLinks = { ...formData.socialLinks };
+    delete updatedSocialLinks[platform];
+    setFormData({
+      ...formData,
+      socialLinks: updatedSocialLinks
+    });
+  };
+
+  const handleSocialLinkChange = (platform, value) => {
+    setFormData({
+      ...formData,
+      socialLinks: {
+        ...formData.socialLinks,
+        [platform]: value
+      }
+    });
+  };
+
   const getInitials = (name) => {
     return name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U';
   };
@@ -188,7 +324,7 @@ const ProfilePage = () => {
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold">My Profile</h1>
               <p className="text-zinc-400 text-sm sm:text-base">
-                Manage your personal information
+                Manage your personal information and social links
               </p>
             </div>
             {!isEditing ? (
@@ -220,18 +356,72 @@ const ProfilePage = () => {
             {/* Left Column - Avatar & Basic Info */}
             <div className="lg:col-span-1">
               <Card className="p-6 text-center">
-                <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-violet-600 to-blue-600 flex items-center justify-center mx-auto">
-                  <span className="text-3xl sm:text-5xl font-bold text-white">
-                    {getInitials(profile?.name)}
-                  </span>
+                {/* Avatar with Upload */}
+                <div className="relative w-24 h-24 sm:w-32 sm:h-32 mx-auto group">
+                  <div className="w-full h-full rounded-full bg-gradient-to-br from-violet-600 to-blue-600 flex items-center justify-center overflow-hidden">
+                    {profile?.avatar ? (
+                      <img 
+                        src={profile.avatar} 
+                        alt={profile.name}
+                        className="w-full h-full rounded-full object-cover"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.parentElement.innerHTML = `<span class="text-3xl sm:text-5xl font-bold text-white">${getInitials(profile?.name)}</span>`;
+                        }}
+                      />
+                    ) : (
+                      <span className="text-3xl sm:text-5xl font-bold text-white">
+                        {getInitials(profile?.name)}
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Upload Overlay */}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                    disabled={uploadingImage}
+                  >
+                    {uploadingImage ? (
+                      <FaSpinner className="w-6 h-6 text-white animate-spin" />
+                    ) : (
+                      <FaCamera className="w-6 h-6 text-white" />
+                    )}
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
                 </div>
+
+                {/* Remove Avatar Button */}
+                {profile?.avatar && (
+                  <button
+                    onClick={handleRemoveAvatar}
+                    className="mt-2 text-xs text-red-400 hover:text-red-300 transition"
+                  >
+                    <FaTrash className="inline w-3 h-3 mr-1" />
+                    Remove Photo
+                  </button>
+                )}
+
                 <h2 className="text-xl font-semibold mt-4">{profile?.name}</h2>
                 <p className="text-zinc-400 text-sm">{profile?.headline || 'No headline'}</p>
+                
                 <div className="mt-4 space-y-2 text-sm text-zinc-400">
                   <div className="flex items-center justify-center gap-2">
                     <FaEnvelope className="w-4 h-4 text-violet-400" />
                     <span>{profile?.email}</span>
                   </div>
+                  {profile?.phone && (
+                    <div className="flex items-center justify-center gap-2">
+                      <FaPhone className="w-4 h-4 text-violet-400" />
+                      <span>{profile.phone}</span>
+                    </div>
+                  )}
                   {profile?.location && (
                     <div className="flex items-center justify-center gap-2">
                       <FaMapMarkerAlt className="w-4 h-4 text-violet-400" />
@@ -248,29 +438,50 @@ const ProfilePage = () => {
                     </span>
                   </div>
                 </div>
+
+                {/* Stats */}
+                <div className="mt-4 pt-4 border-t border-white/10">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <p className="text-xl font-bold text-white">{profile?.rating || 0}</p>
+                      <p className="text-xs text-zinc-400">Rating</p>
+                    </div>
+                    <div>
+                      <p className="text-xl font-bold text-white">{profile?.totalProjects || 0}</p>
+                      <p className="text-xs text-zinc-400">Projects</p>
+                    </div>
+                    <div>
+                      <p className="text-xl font-bold text-green-400">{profile?.completedProjects || 0}</p>
+                      <p className="text-xs text-zinc-400">Completed</p>
+                    </div>
+                  </div>
+                </div>
               </Card>
 
-              {/* Stats */}
+              {/* Social Links Display */}
               <Card className="p-6 mt-6">
-                <h3 className="font-semibold mb-3">Stats</h3>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Rating</span>
-                    <span className="text-yellow-400">⭐ {profile?.rating || 0}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Total Projects</span>
-                    <span className="text-white">{profile?.totalProjects || 0}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-zinc-400">Completed</span>
-                    <span className="text-green-400">{profile?.completedProjects || 0}</span>
-                  </div>
-                  {profile?.hourlyRate > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-zinc-400">Hourly Rate</span>
-                      <span className="text-green-400">${profile.hourlyRate}/hr</span>
-                    </div>
+                <h3 className="font-semibold mb-3">Social Links</h3>
+                <div className="space-y-2">
+                  {Object.entries(formData.socialLinks).length === 0 ? (
+                    <p className="text-sm text-zinc-400">No social links added</p>
+                  ) : (
+                    Object.entries(formData.socialLinks).map(([platform, url]) => {
+                      const social = SOCIAL_PLATFORMS.find(s => s.id === platform);
+                      if (!social || !url) return null;
+                      return (
+                        <a
+                          key={platform}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition p-2 hover:bg-white/5 rounded-lg"
+                        >
+                          <social.icon className="w-4 h-4" />
+                          <span>{social.label}</span>
+                          <FaLink className="w-3 h-3 ml-auto text-zinc-600" />
+                        </a>
+                      );
+                    })
                   )}
                 </div>
               </Card>
@@ -282,7 +493,6 @@ const ProfilePage = () => {
                 <h3 className="text-lg font-semibold mb-4">Profile Information</h3>
                 
                 {isEditing ? (
-                  // Edit Mode
                   <div className="space-y-4">
                     <Input
                       label="Full Name"
@@ -297,10 +507,17 @@ const ProfilePage = () => {
                       onChange={(e) => setFormData({ ...formData, headline: e.target.value })}
                     />
 
+                    <Input
+                      label="Phone Number"
+                      placeholder="+1 234 567 8900"
+                      value={formData.phone}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    />
+
                     <div>
                       <label className="block text-sm font-medium text-zinc-300 mb-2">Bio</label>
                       <textarea
-                        className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-zinc-500 transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 min-h-[100px]"
+                        className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder-zinc-500 transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20 min-h-[120px]"
                         value={formData.bio}
                         onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                         placeholder="Tell us about yourself..."
@@ -482,33 +699,70 @@ const ProfilePage = () => {
                       </>
                     )}
 
-                    {/* Social Links */}
-                    <h4 className="font-semibold mt-4">Social Links</h4>
-                    <div className="space-y-3">
-                      <Input
-                        label="GitHub"
-                        placeholder="https://github.com/username"
-                        value={formData.github}
-                        onChange={(e) => setFormData({ ...formData, github: e.target.value })}
-                      />
-                      <Input
-                        label="LinkedIn"
-                        placeholder="https://linkedin.com/in/username"
-                        value={formData.linkedin}
-                        onChange={(e) => setFormData({ ...formData, linkedin: e.target.value })}
-                      />
-                      <Input
-                        label="Twitter"
-                        placeholder="https://twitter.com/username"
-                        value={formData.twitter}
-                        onChange={(e) => setFormData({ ...formData, twitter: e.target.value })}
-                      />
-                      <Input
-                        label="Website"
-                        placeholder="https://yourwebsite.com"
-                        value={formData.website}
-                        onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                      />
+                    {/* Social Links Editor */}
+                    <div>
+                      <label className="block text-sm font-medium text-zinc-300 mb-2">Social Links</label>
+                      <div className="flex gap-2 mb-2">
+                        <select
+                          className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white transition focus:border-violet-500 focus:outline-none focus:ring-2 focus:ring-violet-500/20"
+                          value={selectedSocial}
+                          onChange={(e) => {
+                            setSelectedSocial(e.target.value);
+                            if (e.target.value && !formData.socialLinks[e.target.value]) {
+                              setFormData({
+                                ...formData,
+                                socialLinks: {
+                                  ...formData.socialLinks,
+                                  [e.target.value]: ''
+                                }
+                              });
+                            }
+                          }}
+                        >
+                          <option value="">Select platform</option>
+                          {SOCIAL_PLATFORMS.map((social) => (
+                            <option key={social.id} value={social.id}>
+                              {social.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      {selectedSocial && (
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder={SOCIAL_PLATFORMS.find(s => s.id === selectedSocial)?.placeholder || 'Enter URL'}
+                            value={formData.socialLinks[selectedSocial] || ''}
+                            onChange={(e) => handleSocialLinkChange(selectedSocial, e.target.value)}
+                          />
+                          <Button type="button" onClick={handleAddSocialLink}>
+                            <FaPlus className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {Object.entries(formData.socialLinks).map(([platform, url]) => {
+                          const social = SOCIAL_PLATFORMS.find(s => s.id === platform);
+                          if (!social || !url) return null;
+                          return (
+                            <span
+                              key={platform}
+                              className="flex items-center gap-2 px-3 py-1 bg-violet-500/20 text-violet-400 rounded-full text-sm"
+                            >
+                              <social.icon className="w-3 h-3" />
+                              {social.label}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveSocialLink(platform)}
+                                className="hover:text-white transition"
+                              >
+                                <FaTimes className="w-3 h-3" />
+                              </button>
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -525,6 +779,13 @@ const ProfilePage = () => {
                       <div>
                         <h4 className="text-sm font-medium text-zinc-400">Bio</h4>
                         <p className="text-white whitespace-pre-wrap">{profile.bio}</p>
+                      </div>
+                    )}
+
+                    {profile?.phone && (
+                      <div>
+                        <h4 className="text-sm font-medium text-zinc-400">Phone</h4>
+                        <p className="text-white">{profile.phone}</p>
                       </div>
                     )}
 
@@ -574,30 +835,27 @@ const ProfilePage = () => {
                       </div>
                     )}
 
-                    {(profile?.github || profile?.linkedin || profile?.twitter || profile?.website) && (
+                    {/* Social Links Display */}
+                    {Object.entries(formData.socialLinks).length > 0 && (
                       <div>
                         <h4 className="text-sm font-medium text-zinc-400 mb-2">Social Links</h4>
-                        <div className="flex gap-3">
-                          {profile.github && (
-                            <a href={profile.github} target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-white transition">
-                              <FaGithub className="w-5 h-5" />
-                            </a>
-                          )}
-                          {profile.linkedin && (
-                            <a href={profile.linkedin} target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-white transition">
-                              <FaLinkedin className="w-5 h-5" />
-                            </a>
-                          )}
-                          {profile.twitter && (
-                            <a href={profile.twitter} target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-white transition">
-                              <FaTwitter className="w-5 h-5" />
-                            </a>
-                          )}
-                          {profile.website && (
-                            <a href={profile.website} target="_blank" rel="noopener noreferrer" className="text-zinc-400 hover:text-white transition">
-                              <FaGlobe className="w-5 h-5" />
-                            </a>
-                          )}
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(formData.socialLinks).map(([platform, url]) => {
+                            const social = SOCIAL_PLATFORMS.find(s => s.id === platform);
+                            if (!social || !url) return null;
+                            return (
+                              <a
+                                key={platform}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full text-sm text-zinc-300 hover:bg-white/10 transition"
+                              >
+                                <social.icon className="w-3 h-3" />
+                                {social.label}
+                              </a>
+                            );
+                          })}
                         </div>
                       </div>
                     )}

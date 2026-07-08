@@ -2,6 +2,12 @@
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
 import { validationResult } from 'express-validator';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -21,16 +27,12 @@ export const register = async (req, res) => {
 
     const { 
       name, email, password, role,
-      // Freelancer fields
       headline, bio, location, hourlyRate, skills, 
       experienceLevel, availability, languages,
-      // Client fields
       companyName, companyWebsite, industry, companySize, companyDescription,
-      // Social links
-      github, linkedin, twitter, website
+      github, linkedin, twitter, website, phone
     } = req.body;
 
-    // Check if user exists
     const userExists = await User.findOne({ email });
     if (userExists) {
       return res.status(400).json({
@@ -39,15 +41,14 @@ export const register = async (req, res) => {
       });
     }
 
-    // Build user data based on role
     const userData = {
       name,
       email,
       password,
       role: role || 'freelancer',
+      phone: phone || '',
     };
 
-    // Add freelancer specific fields
     if (role === 'freelancer') {
       userData.headline = headline || '';
       userData.bio = bio || '';
@@ -59,7 +60,6 @@ export const register = async (req, res) => {
       userData.languages = languages || [];
     }
 
-    // Add client specific fields
     if (role === 'client') {
       userData.companyName = companyName || '';
       userData.companyWebsite = companyWebsite || '';
@@ -68,16 +68,13 @@ export const register = async (req, res) => {
       userData.companyDescription = companyDescription || '';
     }
 
-    // Add social links
-    userData.github = github || '';
-    userData.linkedin = linkedin || '';
-    userData.twitter = twitter || '';
-    userData.website = website || '';
+    userData.socialLinks = {};
+    if (github) userData.socialLinks.github = github;
+    if (linkedin) userData.socialLinks.linkedin = linkedin;
+    if (twitter) userData.socialLinks.twitter = twitter;
+    if (website) userData.socialLinks.website = website;
 
-    // Create user
     const user = await User.create(userData);
-
-    // Generate token
     const token = generateToken(user._id);
 
     res.status(201).json({
@@ -97,6 +94,8 @@ export const register = async (req, res) => {
         isVerified: user.isVerified,
         rating: user.rating,
         totalProjects: user.totalProjects,
+        phone: user.phone,
+        socialLinks: user.socialLinks,
       }
     });
   } catch (error) {
@@ -157,6 +156,8 @@ export const login = async (req, res) => {
         isVerified: user.isVerified,
         rating: user.rating,
         totalProjects: user.totalProjects,
+        phone: user.phone,
+        socialLinks: user.socialLinks,
       }
     });
   } catch (error) {
@@ -174,6 +175,13 @@ export const login = async (req, res) => {
 export const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
     res.status(200).json({
       success: true,
       user
@@ -193,7 +201,6 @@ export const getMe = async (req, res) => {
 export const updateProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
-
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -205,26 +212,128 @@ export const updateProfile = async (req, res) => {
       'name', 'headline', 'bio', 'location', 'hourlyRate', 
       'skills', 'experienceLevel', 'availability', 'languages',
       'companyName', 'companyWebsite', 'industry', 'companySize', 'companyDescription',
-      'github', 'linkedin', 'twitter', 'website'
+      'socialLinks', 'portfolio', 'phone', 'website'
     ];
 
+    const updateData = {};
     allowedFields.forEach(field => {
       if (req.body[field] !== undefined) {
-        user[field] = req.body[field];
+        updateData[field] = req.body[field];
       }
     });
 
+    if (req.body.hourlyRate) {
+      updateData.hourlyRate = parseFloat(req.body.hourlyRate);
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      updateData,
+      {
+        new: true,
+        runValidators: true
+      }
+    ).select('-password');
+
+    res.status(200).json({
+      success: true,
+      user: updatedUser
+    });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update profile'
+    });
+  }
+};
+
+// @desc    Upload avatar
+// @route   POST /api/auth/upload-avatar
+// @access  Private
+export const uploadAvatar = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Delete old avatar if exists
+    if (user.avatar && !user.avatar.includes('default')) {
+      try {
+        const oldPath = path.join(__dirname, '../../uploads/avatars', path.basename(user.avatar));
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+        }
+      } catch (error) {
+        console.error('Error deleting old avatar:', error);
+      }
+    }
+
+    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    user.avatar = avatarUrl;
     await user.save();
 
     res.status(200).json({
       success: true,
-      user
+      avatar: avatarUrl,
+      message: 'Avatar uploaded successfully'
     });
   } catch (error) {
-    console.error(error);
+    console.error('Upload avatar error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: 'Failed to upload avatar'
+    });
+  }
+};
+
+// @desc    Remove avatar
+// @route   DELETE /api/auth/avatar
+// @access  Private
+export const removeAvatar = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    if (user.avatar && !user.avatar.includes('default')) {
+      try {
+        const oldPath = path.join(__dirname, '../../uploads/avatars', path.basename(user.avatar));
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+        }
+      } catch (error) {
+        console.error('Error deleting avatar:', error);
+      }
+    }
+
+    user.avatar = null;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Avatar removed successfully'
+    });
+  } catch (error) {
+    console.error('Remove avatar error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to remove avatar'
     });
   }
 };

@@ -17,6 +17,7 @@ import RegisterSteps from './pages/Auth/RegisterSteps';
 import DashboardPage from './pages/DashboardPage';
 import ProfilePage from './pages/ProfilePage';
 import MyProposalsPage from './pages/MyProposalsPage';
+import ClientProposalsPage from './pages/ClientProposalsPage';
 import MyJobsPage from './pages/MyJobsPage';
 import CreateJobPage from './pages/CreateJobPage';
 import JobDetailsPage from './pages/JobDetailsPage';
@@ -46,6 +47,7 @@ function App() {
               <Route path="dashboard" element={<DashboardPage />} />
               <Route path="profile" element={<ProfilePage />} />
               <Route path="my-proposals" element={<MyProposalsPage />} />
+              <Route path="client-proposals" element={<ClientProposalsPage />} />
               <Route path="my-jobs" element={<MyJobsPage />} />
               <Route path="create-job" element={<CreateJobPage />} />
               <Route path="create-job" element={<CreateJobPage />} />

@@ -20,6 +20,7 @@ import Container from '../components/ui/Container/Container';
 import Card from '../components/ui/Card/card';
 import Button from '../components/ui/Button/Button';
 import Input from '../components/ui/input';
+import SubscriptionBadge from '../components/common/SubscriptionBadge';
 
 const FreelancersPage = () => {
   const [freelancers, setFreelancers] = useState([]);
@@ -41,13 +42,10 @@ const FreelancersPage = () => {
   const fetchFreelancers = async () => {
     try {
       setLoading(true);
-      // In a real app, you'd have a /freelancers endpoint
-      // For now, we'll use the users endpoint with role filter
       const response = await api.get('/users?role=freelancer');
       setFreelancers(response.data.users || []);
     } catch (error) {
       console.error('Failed to fetch freelancers:', error);
-      // Fallback to mock data if API fails
       setFreelancers(mockFreelancers);
       toast.error('Failed to load freelancers');
     } finally {
@@ -55,7 +53,7 @@ const FreelancersPage = () => {
     }
   };
 
-  // Mock data as fallback
+  // Mock data as fallback with subscription plans
   const mockFreelancers = [
     {
       _id: '1',
@@ -67,6 +65,7 @@ const FreelancersPage = () => {
       skills: ['React', 'Node.js', 'TypeScript', 'GraphQL'],
       hourlyRate: 75,
       avatar: null,
+      subscription: { plan: 'professional', status: 'active' }
     },
     {
       _id: '2',
@@ -78,6 +77,7 @@ const FreelancersPage = () => {
       skills: ['Figma', 'Adobe XD', 'Sketch', 'Prototyping'],
       hourlyRate: 65,
       avatar: null,
+      subscription: { plan: 'starter', status: 'active' }
     },
     {
       _id: '3',
@@ -89,6 +89,7 @@ const FreelancersPage = () => {
       skills: ['Python', 'Django', 'React', 'AWS', 'Docker'],
       hourlyRate: 85,
       avatar: null,
+      subscription: { plan: 'enterprise', status: 'active' }
     },
     {
       _id: '4',
@@ -100,6 +101,7 @@ const FreelancersPage = () => {
       skills: ['React Native', 'Flutter', 'iOS', 'Android'],
       hourlyRate: 70,
       avatar: null,
+      subscription: { plan: 'free', status: 'inactive' }
     },
     {
       _id: '5',
@@ -111,6 +113,7 @@ const FreelancersPage = () => {
       skills: ['AWS', 'Docker', 'Kubernetes', 'Terraform', 'CI/CD'],
       hourlyRate: 90,
       avatar: null,
+      subscription: { plan: 'professional', status: 'active' }
     },
   ];
 
@@ -142,7 +145,6 @@ const FreelancersPage = () => {
   };
 
   const filteredFreelancers = freelancers.filter((freelancer) => {
-    // Search filter
     const matchesSearch = 
       freelancer.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       freelancer.headline?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -150,21 +152,17 @@ const FreelancersPage = () => {
         skill.toLowerCase().includes(searchTerm.toLowerCase())
       );
 
-    // Skills filter
     const matchesSkills = filters.skills.length === 0 || 
       filters.skills.every(skill => 
         freelancer.skills?.some(s => s.toLowerCase().includes(skill.toLowerCase()))
       );
 
-    // Rating filter
     const matchesRating = !filters.minRating || 
       (freelancer.rating || 0) >= parseFloat(filters.minRating);
 
-    // Rate filter
     const matchesRate = !filters.maxRate || 
       (freelancer.hourlyRate || 0) <= parseFloat(filters.maxRate);
 
-    // Location filter
     const matchesLocation = !filters.location || 
       freelancer.location?.toLowerCase().includes(filters.location.toLowerCase());
 
@@ -392,8 +390,15 @@ const FreelancersPage = () => {
                       </div>
                       
                       <div className="flex-1 min-w-0">
+                        {/* Name with Subscription Badge */}
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-lg font-semibold">{freelancer.name}</h3>
+                          
+                          {/* ✅ Subscription Badge */}
+                          {freelancer.subscription?.plan && freelancer.subscription.plan !== 'free' && (
+                            <SubscriptionBadge plan={freelancer.subscription.plan} size="sm" />
+                          )}
+                          
                           <span className="px-2 py-0.5 text-xs bg-green-500/10 text-green-400 rounded-full">
                             Available
                           </span>

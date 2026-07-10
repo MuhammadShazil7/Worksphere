@@ -34,10 +34,20 @@ export const getUsers = async (req, res) => {
       .select('-password')
       .sort({ rating: -1, createdAt: -1 });
     
+    // ✅ Transform users to include subscription data
+    const transformedUsers = users.map(user => {
+      const userObj = user.toObject();
+      // Ensure subscription exists
+      if (!userObj.subscription) {
+        userObj.subscription = { plan: 'free', status: 'inactive' };
+      }
+      return userObj;
+    });
+    
     res.status(200).json({
       success: true,
-      count: users.length,
-      users
+      count: transformedUsers.length,
+      users: transformedUsers
     });
   } catch (error) {
     console.error('Get users error:', error);
@@ -62,9 +72,15 @@ export const getUserById = async (req, res) => {
       });
     }
     
+    // ✅ Transform user to include subscription data
+    const userObj = user.toObject();
+    if (!userObj.subscription) {
+      userObj.subscription = { plan: 'free', status: 'inactive' };
+    }
+    
     res.status(200).json({
       success: true,
-      user
+      user: userObj
     });
   } catch (error) {
     console.error('Get user by ID error:', error);
@@ -100,7 +116,8 @@ export const updateUser = async (req, res) => {
       'name', 'headline', 'bio', 'location', 'hourlyRate', 
       'skills', 'experienceLevel', 'availability', 'languages',
       'companyName', 'companyWebsite', 'industry', 'companySize', 'companyDescription',
-      'github', 'linkedin', 'twitter', 'website', 'avatar'
+      'github', 'linkedin', 'twitter', 'website', 'avatar',
+      'subscription' // ✅ Allow subscription updates
     ];
     
     const updateData = {};
@@ -144,7 +161,7 @@ export const getFreelancerStats = async (req, res) => {
     ]);
     
     const topFreelancers = await User.find({ role: 'freelancer' })
-      .select('name headline rating totalProjects avatar')
+      .select('name headline rating totalProjects avatar subscription')
       .sort({ rating: -1 })
       .limit(5);
     

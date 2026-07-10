@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema({
+  
   name: {
     type: String,
     required: [true, 'Please add a name'],
@@ -136,6 +137,44 @@ const userSchema = new mongoose.Schema({
     default: ''
   },
   
+  // ✅ NEW: Subscription Fields
+  subscription: {
+    plan: {
+      type: String,
+      enum: ['free', 'starter', 'professional', 'enterprise'],
+      default: 'free'
+    },
+    status: {
+      type: String,
+      enum: ['active', 'inactive', 'expired', 'cancelled', 'pending'],
+      default: 'inactive'
+    },
+    startDate: {
+      type: Date
+    },
+    endDate: {
+      type: Date
+    },
+    autoRenew: {
+      type: Boolean,
+      default: true
+    }
+  },
+  
+  // ✅ NEW: Free Proposal Tracking
+  freeProposalsUsed: {
+    type: Number,
+    default: 0
+  },
+  freeProposalsLimit: {
+    type: Number,
+    default: 5
+  },
+  freeProposalsResetDate: {
+    type: Date,
+    default: Date.now
+  },
+  
   // Stats
   rating: {
     type: Number,
@@ -162,7 +201,7 @@ const userSchema = new mongoose.Schema({
   stripeAccountId: {
     type: String,
     default: ''
-  }
+  },
   
 }, {
   timestamps: true
@@ -173,6 +212,8 @@ userSchema.index({ role: 1, isActive: 1 });
 userSchema.index({ skills: 1 });
 userSchema.index({ location: 1 });
 userSchema.index({ hourlyRate: 1 });
+userSchema.index({ 'subscription.plan': 1 });
+userSchema.index({ 'subscription.status': 1 });
 
 // Encrypt password before saving
 userSchema.pre('save', async function(next) {

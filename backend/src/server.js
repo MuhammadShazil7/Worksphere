@@ -15,6 +15,12 @@ import jobRoutes from './routes/jobRoutes.js';
 import proposalRoutes from './routes/proposalRoutes.js';
 import messageRoutes from './routes/messageRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import paymentRoutes from './routes/paymentRoutes.js';
+import deliveryRoutes from './routes/deliveryRoutes.js';
+import withdrawalRoutes from './routes/withdrawalRoutes.js';
+import subscriptionRoutes from './routes/subscriptionRoutes.js';
+import adminRoutes from './routes/adminRoutes.js'
+
 import { initializeSocket } from './socket.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -49,6 +55,12 @@ app.use('/api/jobs', jobRoutes);
 app.use('/api/proposals', proposalRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/deliveries', deliveryRoutes);
+app.use('/api/withdrawals', withdrawalRoutes);
+app.use('/api/subscription', subscriptionRoutes);
+app.use('/api/admin', adminRoutes)
+
 
 // Health check
 app.get('/api/health', (req, res) => {

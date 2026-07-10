@@ -22,8 +22,19 @@ import MyJobsPage from './pages/MyJobsPage';
 import CreateJobPage from './pages/CreateJobPage';
 import JobDetailsPage from './pages/JobDetailsPage';
 import MessagesPage from './pages/MessagesPage';
+import PaymentPage from './pages/PaymentPage';
+import DeliveryPage from './pages/DeliveryPage';
+import EarningsPage from './pages/EarningsPage';
+import PaymentDetailsPage from './pages/PaymentDetailsPage';
+import PaymentsPage from './pages/PaymentsPages';
+import WithdrawPage from './pages/WithdrawPage';
+import WithdrawalsPage from './pages/WithdrawalsPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
+
+
 
 import './styles/globals.css';
+import SubscriptionPage from './pages/SubscriptionPage';
 
 function App() {
   return (
@@ -52,6 +63,18 @@ function App() {
               <Route path="create-job" element={<CreateJobPage />} />
               <Route path="create-job" element={<CreateJobPage />} />
               <Route path="messages" element={<MessagesPage />} />
+              <Route path="payment/:id" element={<PaymentPage />} />
+              <Route path="delivery/:id" element={<DeliveryPage />} />  
+              <Route path="payments/:id" element={<PaymentDetailsPage />} />
+              <Route path="earnings" element={<EarningsPage />} />
+              <Route path="payments" element={<PaymentsPage />} />
+              <Route path="withdraw" element={<WithdrawPage />} />
+              <Route path="withdrawals" element={<WithdrawalsPage />} />
+              <Route path="subscription" element={<SubscriptionPage/>}/>
+              
+              <Route path="admin" element={<AdminDashboardPage />} />
+
+
             </Route>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterSteps />} />

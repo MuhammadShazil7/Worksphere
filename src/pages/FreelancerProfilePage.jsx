@@ -26,6 +26,7 @@ import { useAuth } from '../context/AuthContext';
 import Container from '../components/ui/Container/Container';
 import Card from '../components/ui/Card/card';
 import Button from '../components/ui/Button/Button';
+import SubscriptionBadge from '../components/common/SubscriptionBadge';
 
 const FreelancerProfilePage = () => {
   const { id } = useParams();
@@ -44,9 +45,9 @@ const FreelancerProfilePage = () => {
   const fetchProfile = async () => {
     try {
       setLoading(true);
-      console.log('Fetching profile for ID:', id); // Debug log
+      console.log('Fetching profile for ID:', id);
       const response = await api.get(`/users/${id}`);
-      console.log('Profile response:', response.data); // Debug log
+      console.log('Profile response:', response.data);
       setProfile(response.data.user);
     } catch (error) {
       console.error('Failed to fetch profile:', error);
@@ -156,7 +157,13 @@ const FreelancerProfilePage = () => {
               <div className="flex-1">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <h1 className="text-2xl sm:text-3xl font-bold">{profile.name}</h1>
+                    {/* ✅ Name with Subscription Badge */}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h1 className="text-2xl sm:text-3xl font-bold">{profile.name}</h1>
+                      {profile.subscription?.plan && profile.subscription.plan !== 'free' && (
+                        <SubscriptionBadge plan={profile.subscription.plan} size="md" />
+                      )}
+                    </div>
                     <p className="text-lg text-zinc-400">{profile.headline || 'Freelancer'}</p>
                     <div className="flex flex-wrap gap-4 mt-2 text-sm text-zinc-400">
                       <span className="flex items-center gap-1">
@@ -368,6 +375,22 @@ const FreelancerProfilePage = () => {
                   <FaEnvelope className="w-4 h-4 mr-2" />
                   Hire {profile.name.split(' ')[0]}
                 </Button>
+              )}
+
+              {/* ✅ Premium Badge (if subscriber) */}
+              {profile.subscription?.plan && profile.subscription.plan !== 'free' && (
+                <Card className="p-4 bg-gradient-to-r from-violet-600/10 to-blue-600/10 border-violet-500/20">
+                  <div className="flex items-center gap-2 text-sm">
+                    <FaCheckCircle className="w-4 h-4 text-violet-400" />
+                    <span className="text-zinc-300">
+                      This freelancer is a <span className="font-semibold text-violet-400">{profile.subscription.plan}</span> member
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-500 mt-1">
+                    {profile.subscription.plan === 'professional' && '⭐ Featured profile with priority support'}
+                    {profile.subscription.plan === 'enterprise' && '👑 Top-tier freelancer with dedicated support'}
+                  </p>
+                </Card>
               )}
             </div>
           </div>

@@ -3,6 +3,37 @@ import Proposal from '../models/Proposal.js';
 import Job from '../models/Job.js';
 import User from '../models/User.js';
 
+// Helper function to check if user can submit proposal
+const canUserSubmitProposal = async (userId) => {
+  const user = await User.findById(userId);
+  
+  // Check if user has active paid subscription
+  if (user.subscription && 
+      (user.subscription.plan === 'professional' || user.subscription.plan === 'enterprise') && 
+      user.subscription.status === 'active') {
+    return { canSubmit: true, remaining: -1 };
+  }
+
+  // Check monthly limit for free/starter users
+  const now = new Date();
+  const resetDate = user.freeProposalsResetDate || new Date();
+  
+  // Reset counter if month has changed
+  if (now.getMonth() !== resetDate.getMonth() || now.getFullYear() !== resetDate.getFullYear()) {
+    user.freeProposalsUsed = 0;
+    user.freeProposalsResetDate = now;
+    await user.save();
+  }
+
+  const remaining = user.freeProposalsLimit - user.freeProposalsUsed;
+  return { 
+    canSubmit: remaining > 0, 
+    remaining: remaining,
+    used: user.freeProposalsUsed,
+    limit: user.freeProposalsLimit
+  };
+};
+
 // @desc    Create a proposal
 // @route   POST /api/proposals
 // @access  Private (Freelancer only)
@@ -48,7 +79,19 @@ export const createProposal = async (req, res) => {
       });
     }
 
-    // Create proposal
+    // ✅ NEW: Check subscription/proposal limit
+    const proposalCheck = await canUserSubmitProposal(req.user.id);
+    if (!proposalCheck.canSubmit) {
+      return res.status(403).json({
+        success: false,
+        message: `You have reached your proposal limit (${proposalCheck.limit}/month). Upgrade to Professional or Enterprise plan for unlimited proposals.`,
+        limit: proposalCheck.limit,
+        used: proposalCheck.used,
+        remaining: proposalCheck.remaining
+      });
+    }
+
+    // ✅ NEW: Create proposal
     const proposal = await Proposal.create({
       job: jobId,
       freelancer: req.user.id,
@@ -61,12 +104,31 @@ export const createProposal = async (req, res) => {
     job.proposals.push(proposal._id);
     await job.save();
 
+    // ✅ NEW: Track proposal usage for free/starter users
+    const user = await User.findById(req.user.id);
+    if (user.subscription.plan === 'free' || user.subscription.plan === 'starter') {
+      user.freeProposalsUsed += 1;
+      await user.save();
+    }
+
+    // Populate proposal details
+    const populatedProposal = await Proposal.findById(proposal._id)
+      .populate('freelancer', 'name email avatar headline rating')
+      .populate({
+        path: 'job',
+        populate: {
+          path: 'client',
+          select: 'name email avatar'
+        }
+      });
+
     res.status(201).json({
       success: true,
-      proposal
+      proposal: populatedProposal,
+      remaining: user.freeProposalsLimit - user.freeProposalsUsed
     });
   } catch (error) {
-    console.error(error);
+    console.error('Create proposal error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -106,7 +168,7 @@ export const getProposalsByJob = async (req, res) => {
       proposals
     });
   } catch (error) {
-    console.error(error);
+    console.error('Get proposals by job error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -129,13 +191,23 @@ export const getMyProposals = async (req, res) => {
       })
       .sort({ createdAt: -1 });
 
+    // ✅ NEW: Get proposal usage info
+    const user = await User.findById(req.user.id);
+    const usageInfo = {
+      used: user.freeProposalsUsed || 0,
+      limit: user.freeProposalsLimit || 5,
+      plan: user.subscription?.plan || 'free',
+      isUnlimited: user.subscription?.plan === 'professional' || user.subscription?.plan === 'enterprise'
+    };
+
     res.status(200).json({
       success: true,
       count: proposals.length,
-      proposals
+      proposals,
+      usage: usageInfo
     });
   } catch (error) {
-    console.error(error);
+    console.error('Get my proposals error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -196,12 +268,22 @@ export const updateProposalStatus = async (req, res) => {
     proposal.status = status;
     await proposal.save();
 
+    const updatedProposal = await Proposal.findById(proposal._id)
+      .populate('freelancer', 'name email avatar')
+      .populate({
+        path: 'job',
+        populate: {
+          path: 'client',
+          select: 'name email avatar'
+        }
+      });
+
     res.status(200).json({
       success: true,
-      proposal
+      proposal: updatedProposal
     });
   } catch (error) {
-    console.error(error);
+    console.error('Update proposal status error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -241,13 +323,20 @@ export const withdrawProposal = async (req, res) => {
     proposal.status = 'withdrawn';
     await proposal.save();
 
+    // ✅ NEW: Return proposal count to freelancer if they're on free plan
+    const user = await User.findById(req.user.id);
+    if (user.subscription.plan === 'free' || user.subscription.plan === 'starter') {
+      // We don't decrease the count since it was already used, 
+      // but we could if we wanted to refund the proposal
+    }
+
     res.status(200).json({
       success: true,
       message: 'Proposal withdrawn successfully',
       proposal
     });
   } catch (error) {
-    console.error(error);
+    console.error('Withdraw proposal error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -293,7 +382,47 @@ export const getProposal = async (req, res) => {
       proposal
     });
   } catch (error) {
-    console.error(error);
+    console.error('Get proposal error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+};
+
+// @desc    Get proposal usage/limit info
+// @route   GET /api/proposals/usage
+// @access  Private (Freelancer)
+export const getProposalUsage = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    
+    // Reset if month changed
+    const now = new Date();
+    const resetDate = user.freeProposalsResetDate || new Date();
+    
+    if (now.getMonth() !== resetDate.getMonth() || now.getFullYear() !== resetDate.getFullYear()) {
+      user.freeProposalsUsed = 0;
+      user.freeProposalsResetDate = now;
+      await user.save();
+    }
+
+    const isUnlimited = user.subscription?.plan === 'professional' || user.subscription?.plan === 'enterprise';
+    const remaining = isUnlimited ? -1 : Math.max(0, user.freeProposalsLimit - user.freeProposalsUsed);
+
+    res.status(200).json({
+      success: true,
+      usage: {
+        used: user.freeProposalsUsed || 0,
+        limit: isUnlimited ? 'Unlimited' : user.freeProposalsLimit,
+        remaining: remaining === -1 ? 'Unlimited' : remaining,
+        plan: user.subscription?.plan || 'free',
+        isUnlimited: isUnlimited,
+        resetDate: user.freeProposalsResetDate
+      }
+    });
+  } catch (error) {
+    console.error('Get proposal usage error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'

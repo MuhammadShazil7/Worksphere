@@ -19,6 +19,7 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    console.log('Request:', config.method.toUpperCase(), config.url); // Debug log
     return config;
   },
   (error) => {
@@ -29,9 +30,11 @@ api.interceptors.request.use(
 // Response interceptor - Handle token expiration
 api.interceptors.response.use(
   (response) => {
+    console.log('Response:', response.status, response.config.url); // Debug log
     return response;
   },
   (error) => {
+    console.error('API Error:', error.response?.status, error.response?.data); // Debug log
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');

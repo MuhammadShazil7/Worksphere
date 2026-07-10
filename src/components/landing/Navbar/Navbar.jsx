@@ -27,7 +27,9 @@ import {
   FaRocket,
   FaStar,
   FaBell,
-  FaSearch
+  FaSearch,
+  FaCreditCard,
+  FaDollarSign
 } from "react-icons/fa";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import toast from 'react-hot-toast';
@@ -35,6 +37,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from "../../../context/AuthContext";
 import Container from "../../ui/Container/Container";
 import Logo from "../../common/Logo";
+import SubscriptionBadge from "../../common/SubscriptionBadge";
 import { navLinks } from "../../../constants/navigation";
 
 const Navbar = () => {
@@ -119,14 +122,34 @@ const Navbar = () => {
   const getInitials = (name) => {
     return name?.split(' ').map(n => n[0]).join('').toUpperCase() || 'U';
   };
+  if (user?.role === 'admin') {
+  links.push(
+    { 
+      id: 'admin', 
+      label: 'Admin Panel', 
+      path: '/admin', 
+      icon: FaChartBar,
+      description: 'Manage platform'
+    }
+  );
+}
+  
 
   const freelancerDropdownItems = [
+    
     { 
       id: 'dashboard', 
       label: 'Dashboard', 
       path: '/dashboard', 
       icon: FaChartBar,
       description: 'Overview of your activities'
+    },
+    { 
+      id: 'earnings', 
+      label: 'Earnings', 
+      path: '/earnings', 
+      icon: FaDollarSign,
+      description: 'Track your payments'
     },
     { 
       id: 'my-proposals', 
@@ -141,6 +164,13 @@ const Navbar = () => {
       path: '/messages', 
       icon: FaCommentDots,
       description: 'Chat with clients'
+    },
+    { 
+      id: 'subscription', 
+      label: 'Subscription', 
+      path: '/subscription', 
+      icon: FaCreditCard,
+      description: 'Manage your plan'
     },
     { 
       id: 'profile', 
@@ -186,6 +216,13 @@ const Navbar = () => {
       path: '/messages', 
       icon: FaCommentDots,
       description: 'Chat with freelancers'
+    },
+    { 
+      id: 'subscription', 
+      label: 'Subscription', 
+      path: '/subscription', 
+      icon: FaCreditCard,
+      description: 'Manage your plan'
     },
     { 
       id: 'profile', 
@@ -244,24 +281,31 @@ const Navbar = () => {
                         : "hover:bg-white/5 text-zinc-400 hover:text-white"
                     }`}
                   >
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-600 to-blue-600 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                      {user?.avatar ? (
-                        <img 
-                          src={user.avatar} 
-                          alt={user.name}
-                          className="w-full h-full rounded-full object-cover"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                            e.target.parentElement.innerHTML = `<span class="text-xs font-bold text-white">${getInitials(user?.name)}</span>`;
-                          }}
-                        />
-                      ) : (
-                        <span className="text-xs font-bold text-white">
-                          {getInitials(user?.name)}
-                        </span>
-                      )}
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-600 to-blue-600 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        {user?.avatar ? (
+                          <img 
+                            src={user.avatar} 
+                            alt={user.name}
+                            className="w-full h-full rounded-full object-cover"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              e.target.parentElement.innerHTML = `<span class="text-xs font-bold text-white">${getInitials(user?.name)}</span>`;
+                            }}
+                          />
+                        ) : (
+                          <span className="text-xs font-bold text-white">
+                            {getInitials(user?.name)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-start">
+                        <span className="text-sm font-medium max-w-[100px] truncate">{user.name}</span>
+                        {user?.subscription?.plan && (
+                          <SubscriptionBadge plan={user.subscription.plan} size="sm" />
+                        )}
+                      </div>
                     </div>
-                    <span className="text-sm font-medium max-w-[100px] truncate">{user.name}</span>
                     <FaChevronDown className={`w-3 h-3 transition-transform duration-200 ${isProfileDropdownOpen ? 'rotate-180' : ''}`} />
                   </button>
 
@@ -287,7 +331,12 @@ const Navbar = () => {
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-white truncate">{user.name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-white truncate">{user.name}</p>
+                              {user?.subscription?.plan && (
+                                <SubscriptionBadge plan={user.subscription.plan} size="sm" />
+                              )}
+                            </div>
                             <p className="text-xs text-zinc-400 truncate">{user.email}</p>
                             <span className={`text-xs px-2 py-0.5 rounded-full ${
                               user.role === 'freelancer' 
@@ -409,7 +458,12 @@ const Navbar = () => {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{user.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-white truncate">{user.name}</p>
+                      {user?.subscription?.plan && (
+                        <SubscriptionBadge plan={user.subscription.plan} size="sm" />
+                      )}
+                    </div>
                     <p className="text-xs text-zinc-400 truncate">{user.email}</p>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${
                       user.role === 'freelancer' 
